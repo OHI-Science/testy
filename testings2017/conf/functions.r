@@ -189,6 +189,7 @@ FIS <- function(layers) {
   trend <-
     CalculateTrend(status_data = status_data, trend_years = trend_years)
 
+
   # assemble dimensions
   scores <- rbind(status, trend) %>%
     mutate(goal = 'FIS') %>%
@@ -251,12 +252,6 @@ MAR <- function(layers) {
   # get reference quantile based on argument years
 
   ref_95pct <- quantile(ry$mar_pop, 0.95, na.rm = TRUE)
-
-  # reference information
-  ry_ref = ry %>%
-    arrange(mar_pop) %>%
-    filter(mar_pop >= ref_95pct)
-
 
 
   ry = ry %>%
@@ -938,7 +933,6 @@ CP <- function(layers) {
     select(region_id, goal, dimension, score)
 
 
-
   ## create weights file for pressures/resilience calculations
 
   weights <- extent %>%
@@ -1009,15 +1003,6 @@ TR <- function(layers) {
     mutate(Xtr_q = quantile(Xtr, probs = pct_ref / 100, na.rm = TRUE)) %>%
     mutate(status  = ifelse(Xtr / Xtr_q > 1, 1, Xtr / Xtr_q)) %>% # rescale to qth percentile, cap at 1
     ungroup()
-
-
-  ## reference points
-  ref_point <- tr_model %>%
-    filter(scenario_year == scen_year) %>%
-    select(Xtr_q) %>%
-    unique() %>%
-    data.frame() %>%
-    .$Xtr_q
 
 
   # get status
@@ -1376,7 +1361,6 @@ ICO <- function(layers){
 
   trend <- CalculateTrend(status_data = r.status, trend_years=trend_years)
 
-
   # return scores
   scores <-  rbind(status, trend) %>%
     mutate('goal'='ICO') %>%
@@ -1462,7 +1446,6 @@ LSP <- function(layers) {
 
 
 
-
   # return scores
   scores <- bind_rows(r.status, r.trend) %>%
     mutate(goal = "LSP")
@@ -1545,7 +1528,6 @@ CW <- function(layers) {
     mutate(goal = "CW") %>%
     select(region_id, goal, dimension, score) %>%
     data.frame()
-
 
 
   return(scores)
@@ -1649,7 +1631,6 @@ HAB <- function(layers) {
   scores_HAB <- rbind(status, trend) %>%
     mutate(goal = "HAB") %>%
     select(region_id, goal, dimension, score)
-
 
 
   ## create weights file for pressures/resilience calculations
