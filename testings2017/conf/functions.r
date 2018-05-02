@@ -3,7 +3,7 @@
 ## The function name is the 2- or 3- letter code for each goal or subgoal; 
 ## for example, FIS is the Fishing subgoal of Food Provision (FP).
 
-Setup = function(){
+Setup <- function(){
   if(file.exists('temp/reference_pts.csv'))
   {file.remove('temp/reference_pts.csv')}
   
@@ -104,7 +104,7 @@ write_ref_pts <- function(goal, method, ref_pt) {
 
 
 
-FIS = function(layers){
+FIS <- function(layers){
 
    scen_year <- layers$data$scenario_year
   
@@ -279,7 +279,7 @@ FIS = function(layers){
 }
 
 
-MAR = function(layers){
+MAR <- function(layers){
 
     scen_year <- layers$data$scenario_year
   
@@ -362,7 +362,7 @@ MAR = function(layers){
 }
 
 
-FP = function(layers, scores){
+FP <- function(layers, scores){
   
   scen_year <- layers$data$scenario_year
   
@@ -415,7 +415,7 @@ FP = function(layers, scores){
 }
 
 
-AO = function(layers){
+AO <- function(layers){
 
   Sustainability=1.0
   
@@ -943,7 +943,7 @@ CP <- function(layers){
   
 }
 
-TR = function(layers) {
+TR <- function(layers) {
 
   ## formula:
   ##  E   = Ep                         # Ep: % of direct tourism jobs. tr_jobs_pct_tourism.csv
@@ -1180,7 +1180,7 @@ LIV <- function(layers){
 
   ## create scores and rbind to other goal scores
   scores = rbind(liv_status, liv_trend) %>%
-    dplyr::select(region_id = rgn_id,
+    dplyr::select(region_id,
                   score,
                   dimension,
                   goal)
@@ -1276,7 +1276,7 @@ ECO <- function(layers){
 
   ## create scores and rbind to other goal scores
   scores = rbind(eco_status, eco_trend) %>%
-    dplyr::select(region_id = rgn_id,
+    dplyr::select(region_id,
                   score,
                   dimension,
                   goal)
@@ -1286,30 +1286,49 @@ ECO <- function(layers){
 }
 
 
-ICO = function(layers){
+LE <- function(scores, layers){
 
-    scen_year <- layers$data$scenario_year
-  
+  # calculate LE scores
+  scores.LE = scores %>%
+    filter(goal %in% c('LIV','ECO') & dimension %in% c('status','trend','score','future')) %>%
+    spread(key = goal, value = score) %>%
+    mutate(score = rowMeans(cbind(ECO, LIV), na.rm=TRUE)) %>%
+    select(region_id, dimension, score) %>%
+    mutate(goal  = 'LE')
+
+  # rbind to all scores
+  scores = scores %>%
+    rbind(scores.LE)
+
+  # return scores
+  return(scores)
+}
+
+
+ICO <- function(layers){
+
+  scen_year <- layers$data$scenario_year
+
   rk <- get_data_year(layer_nm="ico_spp_iucn_status", layers_obj = layers) %>%
     select(region_id = rgn_id, sciname, iucn_cat=category, scenario_year, ico_spp_iucn_status_year) %>%
     mutate(iucn_cat = as.character(iucn_cat))
-  
+
   # lookup for weights status
-  #  LC <- "LOWER RISK/LEAST CONCERN (LR/LC)"                         
-  #  NT <- "LOWER RISK/NEAR THREATENED (LR/NT)"                       
+  #  LC <- "LOWER RISK/LEAST CONCERN (LR/LC)"
+  #  NT <- "LOWER RISK/NEAR THREATENED (LR/NT)"
   #  T  <- "THREATENED (T)" treat as "EN"
-  #  VU <- "VULNERABLE (V)"                                           
-  #  EN <- "ENDANGERED (E)"                                           
+  #  VU <- "VULNERABLE (V)"
+  #  EN <- "ENDANGERED (E)"
   #  LR/CD <- "LOWER RISK/CONSERVATION DEPENDENT (LR/CD)" treat as between VU and NT
-  #  CR <- "VERY RARE AND BELIEVED TO BE DECREASING IN NUMBERS"       
-  #  DD <- "INSUFFICIENTLY KNOWN (K)"                                 
-  #  DD <- "INDETERMINATE (I)"                                        
-  #  DD <- "STATUS INADEQUATELY KNOWN-SURVEY REQUIRED OR DATA SOUGHT" 
+  #  CR <- "VERY RARE AND BELIEVED TO BE DECREASING IN NUMBERS"
+  #  DD <- "INSUFFICIENTLY KNOWN (K)"
+  #  DD <- "INDETERMINATE (I)"
+  #  DD <- "STATUS INADEQUATELY KNOWN-SURVEY REQUIRED OR DATA SOUGHT"
   w.risk_category = data.frame(iucn_cat = c('LC', 'NT', 'CD', 'VU', 'EN', 'CR', 'EX', 'DD'),
                                risk_score = c(0,  0.2,  0.3,  0.4,  0.6,  0.8,  1, NA)) %>%
     mutate(status_score = 1-risk_score) %>%
     mutate(iucn_cat = as.character(iucn_cat))
-  
+
   ####### status
   # STEP 1: take mean of subpopulation scores
   r.status_spp <- rk %>%
@@ -1317,12 +1336,12 @@ ICO = function(layers){
     group_by(region_id, sciname, scenario_year, ico_spp_iucn_status_year) %>%
     summarize(spp_mean = mean(status_score, na.rm=TRUE)) %>%
     ungroup()
-  
+
   # STEP 2: take mean of populations within regions
   r.status <- r.status_spp %>%
     group_by(region_id, scenario_year, ico_spp_iucn_status_year) %>%
     summarize(status = mean(spp_mean, na.rm=TRUE)) %>%
-    ungroup() 
+    ungroup()
 
   ####### status
   status <- r.status %>%
@@ -1330,68 +1349,28 @@ ICO = function(layers){
     mutate(score = status * 100) %>%
     mutate(dimension = "status") %>%
     select(region_id, score, dimension)
-  
+
   ####### trend
   trend_years <- (scen_year-9):(scen_year)
-  
+
   trend <- trend_calc(status_data = r.status, trend_years=trend_years)
-  
-  
+
+
   ## reference points
   write_ref_pts(goal = "ICO", method = "scaled IUCN risk categories",
                 ref_pt = NA)
-  
+
   # return scores
   scores <-  rbind(status, trend) %>%
     mutate('goal'='ICO') %>%
     select(goal, dimension, region_id, score) %>%
     data.frame()
-  
-  ## Gapfill Oecussi Ambeno (rgn 237) with East Timor (rgn 231) data
-  ## Oecussi Ambeno is an enclave within East Timor, so the data should be very similar
-  go <- filter(scores, region_id == 231) %>%
-    mutate(region_id = 237)
-  scores <- rbind(scores, go)
-  
-  
-  ## gapfill missing regions with average scores/trends of regions that share same UN geopolitical region 
-  un_regions <- georegions %>%
-    select(region_id=rgn_id, r2)
-  # ID missing regions:
-  regions <- SelectLayersData(layers, layers=c('rgn_global')) %>%
-    select(region_id = id_num)
-  regions_NA <- setdiff(regions$region_id, scores$region_id)
-  scores_NA <- data.frame(goal="ICO", 
-                          dimension=rep(c("status", "trend"), 
-                                        each=length(regions_NA)), 
-                          region_id=regions_NA, score=NA)
-  
-  scores <- scores %>%
-    rbind(scores_NA) %>%
-    mutate(region_id = as.numeric(region_id)) %>%
-    left_join(un_regions, by="region_id") %>%
-    group_by(dimension, r2) %>%
-    mutate(score_gf = mean(score, na.rm=TRUE)) %>%
-    arrange(dimension, region_id) %>%
-    data.frame()
-  
-  # save gapfilling records
-  scores_gf <- scores %>%
-    mutate(gapfilled = ifelse(is.na(score) & !is.na(score_gf), "1", "0")) %>%
-    mutate(method = ifelse(is.na(score) & !is.na(score_gf), "UN geopolitical avg. (r2)", NA)) %>%
-    select(goal, dimension, region_id, gapfilled, method) 
-  write.csv(scores_gf, "temp/ICO_status_trend_gf.csv", row.names=FALSE)  
-  
-  scores <- scores %>%
-    mutate(score2 = ifelse(is.na(score), score_gf, score)) %>%
-    select(goal, dimension, region_id, score=score2) %>%
-    data.frame()
-  
-  return(scores)  
-  
+  return(scores)
+
 }
 
-LSP = function(layers){
+
+LSP <- function(layers){
  
   scen_year <- layers$data$scenario_year
   
@@ -1464,7 +1443,7 @@ LSP = function(layers){
   return(scores[,c('region_id','goal','dimension','score')])    
 }
 
-SP = function(scores){
+SP <- function(scores){
   
   ## to calculate the four SP dimesions, average those dimensions for ICO and LSP
   s <- scores %>%
@@ -1483,7 +1462,7 @@ SP = function(scores){
 }
 
 
-CW = function(layers){
+CW <- function(layers){
   
   scen_year <- layers$data$scenario_year
   
@@ -1544,7 +1523,7 @@ CW = function(layers){
 }
 
 
-HAB = function(layers){
+HAB <- function(layers){
   
 
   scen_year <- layers$data$scenario_year
@@ -1639,7 +1618,7 @@ HAB = function(layers){
 }
 
 
-SPP = function(layers){
+SPP <- function(layers){
   
   scores <- rbind(layers$data$spp_status, layers$data$spp_trend) %>%
     mutate(goal = 'SPP') %>%
@@ -1653,7 +1632,7 @@ SPP = function(layers){
   return(scores) 
 }
 
-BD = function(scores){
+BD <- function(scores){
   d <- scores %>%
     filter(goal %in% c('HAB', 'SPP')) %>%
     filter(!(dimension %in% c('pressures', 'resilience'))) %>%
@@ -1666,7 +1645,7 @@ BD = function(scores){
   return(rbind(scores, d[,c('region_id','goal','dimension','score')]))
 }
 
-PreGlobalScores = function(layers, conf, scores){
+PreGlobalScores <- function(layers, conf, scores){
   
   # get regions
   name_region_labels <- conf$config$layer_region_labels
@@ -1683,7 +1662,7 @@ PreGlobalScores = function(layers, conf, scores){
   return(scores)
 }
 
-FinalizeScores = function(layers, conf, scores){
+FinalizeScores <- function(layers, conf, scores){
   
   # get regions
   name_region_labels <- conf$config$layer_region_labels
